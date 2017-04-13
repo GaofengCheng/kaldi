@@ -847,7 +847,7 @@ class XconfigGatedLinearLayer(XconfigLayerBase):
     def _generate_config(self):
         split_layer_name = self.layer_type.split('-')
         assert split_layer_name[-1] == 'layer'
-        nonlinearities = split_layer_name[:-1]
+        norm_method = split_layer_name[-2]
 
         # by 'descriptor_final_string' we mean a string that can appear in
         # config-files, i.e. it contains the 'final' names of nodes.
@@ -857,9 +857,9 @@ class XconfigGatedLinearLayer(XconfigLayerBase):
         # the child classes e.g. tdnn might want to process the input
         # before adding the other components
 
-        return self._add_components(input_desc, input_dim, nonlinearities)
+        return self._add_components(input_desc, input_dim, norm_method)
 
-    def _add_components(self, input_desc, input_dim, nonlinearities):
+    def _add_components(self, input_desc, input_dim, norm_method):
         output_dim = self.output_dim()
         self_repair_scale = self.config['self-repair-scale']
         target_rms = self.config['target-rms']
@@ -900,6 +900,7 @@ class XconfigGatedLinearLayer(XconfigLayerBase):
                 ''.format(self.name, cur_node, output_dim, output_dim))
         presigmoid_node = '{0}.affine.presigmoid'.format(self.name)
         configs.append(line)
+
         line = ('component name={0}.{1}'
                 ' type=SigmoidComponent dim={2}'
                 ' self-repair-scale={3}'
@@ -910,6 +911,7 @@ class XconfigGatedLinearLayer(XconfigLayerBase):
                 ' component={0}.{1} input={2}'
                 ''.format(self.name, nonlinearity, presigmoid_node))
         configs.append(line)
+
         sigmoid_node = '{0}.{1}'.format(self.name, nonlinearity)
         linear_node = '{0}.affine.linear'.format(self.name)
 
@@ -923,6 +925,26 @@ class XconfigGatedLinearLayer(XconfigLayerBase):
         configs.append(line)
 
         cur_node = '{0}.gating'.format(self.name)
+
+        # Third part of sigmoidgated layer, adding norm after the nonlinearity
+        if norm_method == 'renorm':
+            line = ('component name={0}.{1}'
+                    ' type=NormalizeComponent dim={2}'
+                    ' target-rms={3}'
+                    ''.format(self.name, norm_method, output_dim,
+                              target_rms))
+        elif norm_method == 'batchnorm':
+            line = ('component name={0}.{1}'
+                    ' type=BatchNormComponent dim={2}'
+                    ' target-rms={3}'
+                    ''.format(self.name, norm_method, output_dim,
+                              target_rms))
+        configs.append(line)
+        line = ('component-node name={0}.{1}'
+                ' component={0}.{1} input={2}'
+                ''.format(self.name, norm_method, cur_node))
+
+        configs.append(line)
         return configs
 
 # This class is for lines like
