@@ -2,6 +2,7 @@
 #           2016    Vijayaditya Peddinti
 #           2017    Google Inc. (vpeddinti@google.com)
 #           2017    Vimal Manohar
+#           2017    Gaofeng Cheng
 # Apache 2.0.
 
 """ This module contains the parent class from which all layers are inherited
@@ -628,7 +629,7 @@ class XconfigBasicLayer(XconfigLayerBase):
         # Here we just list some likely combinations.. you can just add any
         # combinations you want to use, to this list.
         assert first_token in [ 'relu-layer', 'relu-renorm-layer', 'sigmoid-layer',
-                                'tanh-layer', 'relu-batchnorm-layer' ]
+                                'tanh-layer', 'relu-batchnorm-layer']
         XconfigLayerBase.__init__(self, first_token, key_to_value, prev_names)
 
     def set_default_configs(self):
@@ -780,6 +781,149 @@ class XconfigBasicLayer(XconfigLayerBase):
             cur_node = '{0}.{1}'.format(self.name, nonlinearity)
         return configs
 
+class XconfigGatedLinearLayer(XconfigLayerBase):
+    def __init__(self, first_token, key_to_value, prev_names = None):
+        # This class is designed to add gated linear layer
+        # see ref : https://arxiv.org/abs/1612.08083
+        assert first_token in [ 'sigmoidgated-renorm-layer', 'sigmoidgated-batchnorm-layer']
+        XconfigLayerBase.__init__(self, first_token, key_to_value, prev_names)
+
+    def set_default_configs(self):
+
+        # note: self.config['input'] is a descriptor, '[-1]' means output
+        # the most recent layer.
+        self.config = { 'input':'[-1]',
+                        'dim':-1,
+                        'max-change' : 0.75,
+                        'self-repair-scale' : 1.0e-05,
+                        'target-rms' : 1.0,
+                        'learning-rate-factor' : 1.0,
+                        'ng-affine-options' : ''}
+
+    def check_configs(self):
+        if self.config['dim'] < 0:
+            raise RuntimeError("dim has invalid value {0}".format(self.config['dim']))
+        if self.config['self-repair-scale'] < 0.0 or self.config['self-repair-scale'] > 1.0:
+            raise RuntimeError("self-repair-scale has invalid value {0}"
+                               .format(self.config['self-repair-scale']))
+        if self.config['target-rms'] < 0.0:
+            raise RuntimeError("target-rms has invalid value {0}"
+                               .format(self.config['target-rms']))
+        if self.config['learning-rate-factor'] <= 0.0:
+            raise RuntimeError("learning-rate-factor has invalid value {0}"
+                               .format(self.config['learning-rate-factor']))
+
+    def output_name(self, auxiliary_output=None):
+        # at a later stage we might want to expose even the pre-nonlinearity
+        # vectors
+        assert auxiliary_output == None
+
+        split_layer_name = self.layer_type.split('-')
+        assert split_layer_name[-1] == 'layer'
+        last_nonlinearity = split_layer_name[-2]
+        # return something like: layer3.renorm
+        return '{0}.{1}'.format(self.name, last_nonlinearity)
+
+    def output_dim(self, auxiliary_output = None):
+        output_dim = self.config['dim']
+        # If not set, the output-dim defaults to the input-dim.
+        if output_dim <= 0:
+            output_dim = self.descriptors['input']['dim']
+        return output_dim
+
+
+    def get_full_config(self):
+        ans = []
+        config_lines = self._generate_config()
+
+        for line in config_lines:
+            for config_name in ['ref', 'final']:
+                # we do not support user specified matrices in this layer
+                # so 'ref' and 'final' configs are the same.
+                ans.append((config_name, line))
+        return ans
+
+
+    def _generate_config(self):
+        split_layer_name = self.layer_type.split('-')
+        assert split_layer_name[-1] == 'layer'
+        nonlinearities = split_layer_name[:-1]
+
+        # by 'descriptor_final_string' we mean a string that can appear in
+        # config-files, i.e. it contains the 'final' names of nodes.
+        input_desc = self.descriptors['input']['final-string']
+        input_dim = self.descriptors['input']['dim']
+
+        # the child classes e.g. tdnn might want to process the input
+        # before adding the other components
+
+        return self._add_components(input_desc, input_dim, nonlinearities)
+
+    def _add_components(self, input_desc, input_dim, nonlinearities):
+        output_dim = self.output_dim()
+        self_repair_scale = self.config['self-repair-scale']
+        target_rms = self.config['target-rms']
+        max_change = self.config['max-change']
+        ng_affine_options = self.config['ng-affine-options']
+        learning_rate_factor=self.config['learning-rate-factor']
+        learning_rate_option=('learning-rate-factor={0}'.format(learning_rate_factor)
+                              if learning_rate_factor != 1.0 else '')
+
+        configs = []
+        nonlinearity='sigmoid'
+        # First the affine node, for sigmoidgated layer, if the output dim is 512,
+        # we will first using a input-dim*1024 affine for the first node.
+        line = ('component name={0}.affine'
+                ' type=NaturalGradientAffineComponent'
+                ' input-dim={1}'
+                ' output-dim={2}'
+                ' max-change={3}'
+                ' {4} {5} '
+                ''.format(self.name, input_dim, output_dim*2,
+                          max_change, ng_affine_options,
+                          learning_rate_option))
+        configs.append(line)
+
+        line = ('component-node name={0}.affine'
+                ' component={0}.affine input={1}'
+                ''.format(self.name, input_desc))
+        configs.append(line)
+        cur_node = '{0}.affine'.format(self.name)
+        # Second part of the simoidgated layer, including spliting the dim and doing
+        # gated elementwise multiplication
+        line = ('dim-range-node name={0}.affine.linear'
+                ' input-node={1} dim-offset={2} dim={3}'
+                ''.format(self.name, cur_node, 0, output_dim))
+        configs.append(line)
+        line = ('dim-range-node name={0}.affine.presigmoid'
+                ' input-node={1} dim-offset={2} dim={3}'
+                ''.format(self.name, cur_node, output_dim, output_dim))
+        presigmoid_node = '{0}.affine.presigmoid'.format(self.name)
+        configs.append(line)
+        line = ('component name={0}.{1}'
+                ' type=SigmoidComponent dim={2}'
+                ' self-repair-scale={3}'
+                ''.format(self.name, nonlinearity, output_dim,
+                          self_repair_scale))
+        configs.append(line)
+        line = ('component-node name={0}.{1}'
+                ' component={0}.{1} input={2}'
+                ''.format(self.name, nonlinearity, presigmoid_node))
+        configs.append(line)
+        sigmoid_node = '{0}.{1}'.format(self.name, nonlinearity)
+        linear_node = '{0}.affine.linear'.format(self.name)
+
+        line = ('component name={0}.gating'
+                ' type=ElementwiseProductComponent input-dim={1} output-dim={2}'
+                ''.format(self.name, output_dim*2, output_dim))
+        configs.append(line)
+        line = ('component-node name={0}.gating'
+                ' component={0}.gating input=Append({1}, {2})'
+                ''.format(self.name, linear_node, sigmoid_node))
+        configs.append(line)
+
+        cur_node = '{0}.gating'.format(self.name)
+        return configs
 
 # This class is for lines like
 #  'fixed-affine-layer name=lda input=Append(-2,-1,0,1,2,ReplaceIndex(ivector, t, 0)) affine-transform-file=foo/bar/lda.mat'
