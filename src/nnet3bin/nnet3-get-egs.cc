@@ -33,6 +33,8 @@ namespace nnet3 {
 static bool ProcessFile(const MatrixBase<BaseFloat> &feats,
                         const MatrixBase<BaseFloat> *ivector_feats,
                         int32 ivector_period,
+                        bool ivector_as_input,
+                        bool ivector_as_output,
                         const Posterior &pdf_post,
                         const std::string &utt_id,
                         bool compress,
@@ -85,7 +87,7 @@ static bool ProcessFile(const MatrixBase<BaseFloat> &feats,
     // call the regular input "input".
     eg.io.push_back(NnetIo("input", -chunk.left_context, input_frames));
 
-    if (ivector_feats != NULL) {
+    if (ivector_feats != NULL && ivector_as_input) {
       // if applicable, add the iVector feature.
       // choose iVector from a random frame in the chunk
       int32 ivector_frame = RandInt(start_frame,
@@ -127,6 +129,22 @@ static bool ProcessFile(const MatrixBase<BaseFloat> &feats,
     }
 
     eg.io.push_back(NnetIo("output", num_pdfs, 0, labels));
+
+    if (ivector_feats != NULL && ivector_as_output) {
+      // if applicable, add the iVector feature.
+      // choose iVector from a random frame in the chunk
+
+      int32 ivector_frame = RandInt(start_frame,
+                                    start_frame + num_input_frames - 1),
+          ivector_frame_subsampled = ivector_frame / ivector_period;
+      if (ivector_frame_subsampled < 0)
+        ivector_frame_subsampled = 0;
+      if (ivector_frame_subsampled >= ivector_feats->NumRows())
+        ivector_frame_subsampled = ivector_feats->NumRows() - 1;
+      Matrix<BaseFloat> ivector(num_frames_subsampled, ivector_feats->NumCols());
+      ivector.CopyRowsFromVec(ivector_feats->Row(ivector_frame_subsampled));
+      eg.io.push_back(NnetIo("ivector_aux_output", 0, ivector));
+    }
 
     if (compress)
       eg.Compress();
@@ -170,7 +188,7 @@ int main(int argc, char *argv[]) {
         "   ark:- \n";
 
 
-    bool compress = true;
+    bool compress = true, ivector_as_input = true, ivector_as_output = false;
     int32 num_pdfs = -1, length_tolerance = 100,
         online_ivector_period = 1;
 
@@ -192,6 +210,10 @@ int main(int argc, char *argv[]) {
     po.Register("online-ivector-period", &online_ivector_period, "Number of "
                 "frames between iVectors in matrices supplied to the "
                 "--online-ivectors option");
+    po.Register("ivector-as-input", &ivector_as_input, "ivector added to the input of"
+                "the neural netwrok");
+    po.Register("ivector-as-output", &ivector_as_output, "ivector added to the output of"
+                "the neural network as aux MSE training features");
     po.Register("length-tolerance", &length_tolerance, "Tolerance for "
                 "difference in num-frames between feat and ivector matrices");
     eg_config.Register(&po);
@@ -261,6 +283,7 @@ int main(int argc, char *argv[]) {
         }
 
         if (!ProcessFile(feats, online_ivector_feats, online_ivector_period,
+                         ivector_as_input, invector_as_output,
                          pdf_post, key, compress, num_pdfs,
                          &utt_splitter, &example_writer))
             num_err++;

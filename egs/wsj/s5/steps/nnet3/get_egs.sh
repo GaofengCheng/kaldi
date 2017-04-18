@@ -52,6 +52,7 @@ ivector_as_output=false # if this is true, then the ivectors will be added as th
                         # of the neural network, this is used for the multitask learning
                         # with the ivector as the auxiliary feature, we do this for ivector-free
                         # decoding
+ivector_as_input=true
 cmvn_opts=  # can be used for specifying CMVN options, if feature type is not lda (if lda,
             # it doesn't make sense to use different options than were used as input to the
             # LDA transform).  This is used to turn off CMVN in the online-nnet experiments.
@@ -195,7 +196,7 @@ if [ ! -z "$online_ivector_dir" ]; then
   steps/nnet2/get_ivector_id.sh $online_ivector_dir > $dir/info/final.ie.id || exit 1
   ivector_period=$(cat $online_ivector_dir/ivector_period) || exit 1;
   ivector_opts="--online-ivectors=scp:$online_ivector_dir/ivector_online.scp --online-ivector-period=$ivector_period"
-  ivector_adding_opts="--ivector-as-output=$ivector_as_output"
+  ivector_adding_opts="--ivector-as-output=$ivector_as_output --ivector-as-input=$ivector_as_input"
 else
   ivector_opts=""
   ivector_adding_opts=""
