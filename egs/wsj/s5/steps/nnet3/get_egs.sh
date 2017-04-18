@@ -38,7 +38,7 @@ samples_per_iter=400000 # this is the target number of egs in each archive of eg
                         # (prior to merging egs).  We probably should have called
                         # it egs_per_iter. This is just a guideline; it will pick
                         # a number that divides the number of samples in the
-                        # entire data.
+                        # entire data
 
 transform_dir=     # If supplied, overrides alidir as the place to find fMLLR transforms
 
@@ -48,6 +48,10 @@ nj=6         # This should be set to the maximum number of jobs you are
              # speed is greater and you have more machines.
 srand=0     # rand seed for nnet3-copy-egs and nnet3-shuffle-egs
 online_ivector_dir=  # can be used if we are including speaker information as iVectors.
+ivector_as_output=false # if this is true, then the ivectors will be added as the labels 
+                        # of the neural network, this is used for the multitask learning
+                        # with the ivector as the auxiliary feature, we do this for ivector-free
+                        # decoding
 cmvn_opts=  # can be used for specifying CMVN options, if feature type is not lda (if lda,
             # it doesn't make sense to use different options than were used as input to the
             # LDA transform).  This is used to turn off CMVN in the online-nnet experiments.
@@ -191,8 +195,10 @@ if [ ! -z "$online_ivector_dir" ]; then
   steps/nnet2/get_ivector_id.sh $online_ivector_dir > $dir/info/final.ie.id || exit 1
   ivector_period=$(cat $online_ivector_dir/ivector_period) || exit 1;
   ivector_opts="--online-ivectors=scp:$online_ivector_dir/ivector_online.scp --online-ivector-period=$ivector_period"
+  ivector_adding_opts="--ivector-as-output=$ivector_as_output"
 else
   ivector_opts=""
+  ivector_adding_opts=""
   echo 0 >$dir/info/ivector_dim
 fi
 
@@ -298,13 +304,13 @@ if [ $stage -le 3 ]; then
     utils/filter_scp.pl $dir/valid_uttlist $dir/ali_special.scp \| \
     ali-to-pdf $alidir/final.mdl scp:- ark:- \| \
     ali-to-post ark:- ark:- \| \
-    nnet3-get-egs --num-pdfs=$num_pdfs $ivector_opts $egs_opts "$valid_feats" \
+    nnet3-get-egs --num-pdfs=$num_pdfs $ivector_opts $ivector_adding_opts $egs_opts "$valid_feats" \
       ark,s,cs:- "ark:$dir/valid_all.egs" || touch $dir/.error &
   $cmd $dir/log/create_train_subset.log \
     utils/filter_scp.pl $dir/train_subset_uttlist $dir/ali_special.scp \| \
     ali-to-pdf $alidir/final.mdl scp:- ark:- \| \
     ali-to-post ark:- ark:- \| \
-    nnet3-get-egs --num-pdfs=$num_pdfs $ivector_opts $egs_opts "$train_subset_feats" \
+    nnet3-get-egs --num-pdfs=$num_pdfs $ivector_opts $ivector_adding_opts $egs_opts "$train_subset_feats" \
       ark,s,cs:- "ark:$dir/train_subset_all.egs" || touch $dir/.error &
   wait;
   [ -f $dir/.error ] && echo "Error detected while creating train/valid egs" && exit 1
@@ -343,7 +349,7 @@ if [ $stage -le 4 ]; then
   echo "$0: Generating training examples on disk"
   # The examples will go round-robin to egs_list.
   $cmd JOB=1:$nj $dir/log/get_egs.JOB.log \
-    nnet3-get-egs --num-pdfs=$num_pdfs $ivector_opts $egs_opts "$feats" \
+    nnet3-get-egs --num-pdfs=$num_pdfs $ivector_opts $ivector_adding_opts $egs_opts "$feats" \
     "ark,s,cs:filter_scp.pl $sdata/JOB/utt2spk $dir/ali.scp | ali-to-pdf $alidir/final.mdl scp:- ark:- | ali-to-post ark:- ark:- |" ark:- \| \
     nnet3-copy-egs --random=true --srand=\$[JOB+$srand] ark:- $egs_list || exit 1;
 fi
