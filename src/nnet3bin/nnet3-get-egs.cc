@@ -35,6 +35,7 @@ static bool ProcessFile(const MatrixBase<BaseFloat> &feats,
                         int32 ivector_period,
                         bool ivector_as_input,
                         bool ivector_as_output,
+                        float32 ivector_scale_factor,
                         const Posterior &pdf_post,
                         const std::string &utt_id,
                         bool compress,
@@ -143,6 +144,7 @@ static bool ProcessFile(const MatrixBase<BaseFloat> &feats,
         ivector_frame_subsampled = ivector_feats->NumRows() - 1;
       Matrix<BaseFloat> ivector(num_frames_subsampled, ivector_feats->NumCols());
       ivector.CopyRowsFromVec(ivector_feats->Row(ivector_frame_subsampled));
+      ivector.Scale(ivector_scale_factor);
       eg.io.push_back(NnetIo("ivector_aux_output", 0, ivector));
     }
 
@@ -168,6 +170,7 @@ int main(int argc, char *argv[]) {
     using namespace kaldi::nnet3;
     typedef kaldi::int32 int32;
     typedef kaldi::int64 int64;
+    typedef kaldi::float32 float32;
 
     const char *usage =
         "Get frame-by-frame examples of data for nnet3 neural network training.\n"
@@ -191,6 +194,7 @@ int main(int argc, char *argv[]) {
     bool compress = true, ivector_as_input = true, ivector_as_output = false;
     int32 num_pdfs = -1, length_tolerance = 100,
         online_ivector_period = 1;
+    float32 ivector_scale_factor = 1.0;
 
     ExampleGenerationConfig eg_config;  // controls num-frames,
                                         // left/right-context, etc.
@@ -214,6 +218,8 @@ int main(int argc, char *argv[]) {
                 "the neural netwrok");
     po.Register("ivector-as-output", &ivector_as_output, "ivector added to the output of"
                 "the neural network as aux MSE training features");
+    po.Register("ivector-scale-factor", &ivector_scale_factor, "factor used to scale the"
+                "ivector value in the ivector_aux_output");
     po.Register("length-tolerance", &length_tolerance, "Tolerance for "
                 "difference in num-frames between feat and ivector matrices");
     eg_config.Register(&po);
@@ -283,7 +289,7 @@ int main(int argc, char *argv[]) {
         }
 
         if (!ProcessFile(feats, online_ivector_feats, online_ivector_period,
-                         ivector_as_input, invector_as_output,
+                         ivector_as_input, ivector_as_output, ivector_scale_factor,
                          pdf_post, key, compress, num_pdfs,
                          &utt_splitter, &example_writer))
             num_err++;
