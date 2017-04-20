@@ -86,6 +86,62 @@ void PnormComponent::Write(std::ostream &os, bool binary) const {
   WriteToken(os, binary, "</PnormComponent>");
 }
 
+void ScaleBackPropagationComponent::Init(int32 dim, BaseFloat scale)  {
+  dim_=dim;
+  scale_=scale;
+  KALDI_ASSERT(scale_ >= 0 && scale_ <= 1 && dim_ > 0);
+}
+
+void ScaleBackPropagationComponent::InitFromConfig(ConfigLine *cfl) {
+  int32 dim = 0;
+  BaseFloat scale = 1;
+  bool ok = cfl->GetValue("dim", &dim) &&
+        cfl->GetValue("scale", &scale) ;
+  if (!ok || cfl->HasUnusedValues() || scale < 0 || scale > 1 || dim <= 0)
+    KALDI_ERR << "Invalid initializer for layer of type "
+              << Type() << ": \"" << cfl->WholeLine() << "\"";
+  Init(dim, scale);
+}
+
+
+void ScaleBackPropagationComponent::Propagate(const ComponentPrecomputedIndexes *indexes,
+                               const CuMatrixBase<BaseFloat> &in,
+                               CuMatrixBase<BaseFloat> *out) const {
+  KALDI_ASSERT(out->NumRows() == in.NumRows() && out->NumCols() == in.NumCols());
+  out->CopyFromMat(in);
+}
+
+void ScaleBackPropagationComponent::Backprop(const std::string &debug_info,
+                                  const ComponentPrecomputedIndexes *indexes,
+                                  const CuMatrixBase<BaseFloat> &, // in_value
+                                  const CuMatrixBase<BaseFloat> &, // out_value
+                                  const CuMatrixBase<BaseFloat> &out_deriv,
+                                  Component *, // to_update
+                                  CuMatrixBase<BaseFloat> *in_deriv) const {
+  if (!in_deriv)  return;
+  KALDI_ASSERT(out_deriv.NumRows() == in_deriv->NumRows() &&
+               in_deriv->NumCols() == dim_ &&
+               out_deriv.NumCols() == dim_);
+  in_deriv->CopyFromMat(out_deriv);
+  in_deriv->Scale(scale_);
+}
+
+void ScaleBackPropagationComponent::Read(std::istream &is, bool binary) {
+  ExpectOneOrTwoTokens(is, binary, "<ScaleBackPropagationComponent>", "<dim>");
+  ReadBasicType(is, binary, &dim_);
+  ExpectToken(is, binary, "<scale>");
+  ReadBasicType(is, binary, &scale_);
+  ExpectToken(is, binary, "</ScaleBackPropagationComponent>");
+}
+
+void ScaleBackPropagationComponent::Write(std::ostream &os, bool binary) const {
+  WriteToken(os, binary, "<ScaleBackPropagationComponent>");
+  WriteToken(os, binary, "<dim>");
+  WriteBasicType(os, binary, dim_);  
+  WriteToken(os, binary, "<scale>");
+  WriteBasicType(os, binary, scale_);
+  WriteToken(os, binary, "</ScaleBackPropagationComponent>");
+}
 
 void DropoutComponent::Init(int32 dim, BaseFloat dropout_proportion,
                             bool dropout_per_frame) {

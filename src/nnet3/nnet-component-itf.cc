@@ -151,6 +151,8 @@ Component* Component::NewComponentOfType(const std::string &component_type) {
     ans = new BackpropTruncationComponent();
   } else if (component_type == "LstmNonlinearityComponent") {
     ans = new LstmNonlinearityComponent();
+  } else if (component_type == "ScaleBackPropagationComponent") {
+    ans = new ScaleBackPropagationComponent();
   }
   if (ans != NULL) {
     KALDI_ASSERT(component_type == ans->Type());
