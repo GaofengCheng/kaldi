@@ -280,6 +280,10 @@ class XconfigLstmpLayer(XconfigLayerBase):
                         'zeroing-threshold' : 15.0,
                         'dropout-proportion' : -1.0, # If -1.0, no dropout components will be added
                         'dropout-per-frame' : False,  # If false, regular dropout, not per frame.
+                        'target-rms' : 1.0,
+                        'batchnorm-location' : 0, # 0 stands no batchnorm applied to LSTM, 1 stands for batchnorm on Location2,
+                                               # 2 stands for batchnorm on Location5, 3 stands for batchnorm on Location directly on
+                                               # memory cell 
                         'decay-time':  -1.0
                        }
 
@@ -322,7 +326,10 @@ class XconfigLstmpLayer(XconfigLayerBase):
         return ['c_t']
 
     def output_name(self, auxiliary_output = None):
-        node_name = 'rp_t'
+        if self.config['batchnorm-location'] == 1:
+            node_name = 'rp_t_batchnormed'
+        else:
+            node_name = 'rp_t'
         if auxiliary_output is not None:
             if auxiliary_output in self.auxiliary_outputs():
                 node_name = auxiliary_output
@@ -386,6 +393,8 @@ class XconfigLstmpLayer(XconfigLayerBase):
         pes_str = self.config['ng-per-element-scale-options']
         dropout_proportion = self.config['dropout-proportion']
         dropout_per_frame = 'true' if self.config['dropout-per-frame'] else 'false'
+        target_rms = self.config['target-rms']
+        batchnorm_location = self.config['batchnorm-location']
 
         # Natural gradient per element scale parameters
         # TODO: decide if we want to keep exposing these options
@@ -415,6 +424,19 @@ class XconfigLstmpLayer(XconfigLayerBase):
 
         configs.append("# Cell input matrices : W_c* matrices")
         configs.append("component name={0}.W_c.xr type=NaturalGradientAffineComponent input-dim={1} output-dim={2} {3}".format(name, input_dim + rec_proj_dim, cell_dim, affine_str))
+        
+        if batchnorm_location == 1:
+            configs.append("# Adding BatchnormComponent to LSTMPs Location2")
+            configs.append("component name={0}.Batchnorm type=BatchNormComponent dim={1}"
+                           " target-rms={2}".format(self.name, rec_proj_dim + nonrec_proj_dim, target_rms))
+        if batchnorm_location == 2:
+            configs.append("# Adding BatchnormComponent to LSTMPs Location5")
+            configs.append("component name={0}.Batchnorm type=BatchNormComponent dim={1}"
+                           " target-rms={2}".format(self.name, rec_proj_dim, target_rms))
+        if batchnorm_location == 3:
+            configs.append("# Adding BatchnormComponent to LSTMPs Memory cells")
+            configs.append("component name={0}.Batchnorm type=BatchNormComponent dim={1}"
+                           " target-rms={2}".format(self.name, cell_dim, target_rms))
 
         configs.append("# Defining the non-linearities")
         configs.append("component name={0}.i type=SigmoidComponent dim={1} {2}".format(name, cell_dim, repair_nonlin_str))
@@ -433,7 +455,11 @@ class XconfigLstmpLayer(XconfigLayerBase):
         configs.append("component name={0}.c type=BackpropTruncationComponent dim={1} {2}".format(name, cell_dim, bptrunc_str))
 
         # c1_t and c2_t defined below
-        configs.append("component-node name={0}.c_t component={0}.c input=Sum({0}.c1_t, {0}.c2_t)".format(name))
+        if batchnorm_location == 3:
+            configs.append("component-node name={0}.c_t_prebatch component={0}.c input=Sum({0}.c1_t, {0}.c2_t)".format(name))
+            configs.append("component-node name={0}.c_t component={0}.Batchnorm input={0}.c_t_prebatch".format(name))            
+        else:
+            configs.append("component-node name={0}.c_t component={0}.c input=Sum({0}.c1_t, {0}.c2_t)".format(name))
         delayed_c_t_descriptor = "IfDefined(Offset({0}.c_t, {1}))".format(name, delay)
 
         recurrent_connection = '{0}.r_t'.format(name)
@@ -486,8 +512,13 @@ class XconfigLstmpLayer(XconfigLayerBase):
         configs.append("# r_t and p_t : rp_t will be the output")
         configs.append("component-node name={0}.rp_t component={0}.W_rp.m input={0}.m_t".format(name))
         configs.append("dim-range-node name={0}.r_t_preclip input-node={0}.rp_t dim-offset=0 dim={1}".format(name, rec_proj_dim))
-        configs.append("component-node name={0}.r_t component={0}.r input={0}.r_t_preclip".format(name))
-
+        if batchnorm_location == 2:
+            configs.append("component-node name={0}.r_t_prebatch component={0}.r input={0}.r_t_preclip".format(name))
+            configs.append("component-node name={0}.r_t component={0}.Batchnorm input={0}.r_t_prebatch".format(name))
+        else:
+            configs.append("component-node name={0}.r_t component={0}.r input={0}.r_t_preclip".format(name))
+        if batchnorm_location == 1:
+            configs.append("component-node name={0}.rp_t_batchnormed component={0}.Batchnorm input={0}.rp_t".format(name))
         return configs
 
 

@@ -106,7 +106,7 @@ void ScaleBackPropagationComponent::InitFromConfig(ConfigLine *cfl) {
 }
 
 
-void ScaleBackPropagationComponent::Propagate(const ComponentPrecomputedIndexes *indexes,
+void* ScaleBackPropagationComponent::Propagate(const ComponentPrecomputedIndexes *indexes,
                                const CuMatrixBase<BaseFloat> &in,
                                CuMatrixBase<BaseFloat> *out) const {
   KALDI_ASSERT(out->NumRows() == in.NumRows() && out->NumCols() == in.NumCols());
@@ -118,6 +118,7 @@ void ScaleBackPropagationComponent::Backprop(const std::string &debug_info,
                                   const CuMatrixBase<BaseFloat> &, // in_value
                                   const CuMatrixBase<BaseFloat> &, // out_value
                                   const CuMatrixBase<BaseFloat> &out_deriv,
+                                  void *memo,
                                   Component *, // to_update
                                   CuMatrixBase<BaseFloat> *in_deriv) const {
   if (!in_deriv)  return;
