@@ -62,10 +62,8 @@ def GetArgs():
                         help="dimension of non-recurrent projection")
     parser.add_argument("--hidden-dim", type=int,
                         help="dimension of fully-connected layers")
-    parser.add_argument("--highway-lstm",type=str,
+    parser.add_argument("--highway-lstm",type=str, action=nnet3_train_lib.StrToBoolAction,
                         help="True for LSTM with highway,False for LSTM without highway",default=False,choices=["false","true"])
-    parser.add_argument("--highway-lstm-h-rec",type=str,
-                        help="True for adding h reccurence into the highway gate",default=False,choices=["false","true"]) 
     # Natural gradient options
     parser.add_argument("--ng-per-element-scale-options", type=str,
                         help="options to be supplied to NaturalGradientPerElementScaleComponent", default="")
@@ -218,8 +216,7 @@ def MakeConfigs(config_dir, feat_dim, ivector_dim, num_targets,
                 norm_based_clipping, clipping_threshold,
                 ng_per_element_scale_options, ng_affine_options,
                 label_delay, include_log_softmax, xent_regularize,
-                self_repair_scale_nonlinearity, self_repair_scale_clipgradient,
-                highway_lstm, highway_lstm_h_rec):
+                self_repair_scale_nonlinearity, self_repair_scale_clipgradient, highway_lstm):
 
     config_lines = {'components':[], 'component-nodes':[]}
 
@@ -237,19 +234,18 @@ def MakeConfigs(config_dir, feat_dim, ivector_dim, num_targets,
 
     for i in range(num_lstm_layers):
         if len(lstm_delay[i]) == 2: # add a bi-directional LSTM layer
-            prev_layer_output = nodes.AddBLstmLayer(config_lines, "BLstm{0}".format(i+1),
+            prev_layer_output = nodes.AddBLstmLayer(config_lines, i, "BLstm{0}".format(i+1),"BLstm{0}".format(i),
                                                     prev_layer_output, cell_dim,
                                                     recurrent_projection_dim, non_recurrent_projection_dim,
                                                     clipping_threshold, norm_based_clipping,
-                                                    ng_per_element_scale_options, ng_affine_options,
+                                                    ng_per_element_scale_options, ng_affine_options, highway_lstm,
                                                     lstm_delay = lstm_delay[i], self_repair_scale_nonlinearity = self_repair_scale_nonlinearity, self_repair_scale_clipgradient = self_repair_scale_clipgradient)
         else: # add a uni-directional LSTM layer
-            prev_layer_output = nodes.AddLstmLayer(config_lines, "Lstm{0}".format(i+1), "Lstm{0}".format(i),
+            prev_layer_output = nodes.AddLstmLayer(config_lines, i, "Lstm{0}".format(i+1), "Lstm{0}".format(i),
                                                    prev_layer_output, cell_dim,
                                                    recurrent_projection_dim, non_recurrent_projection_dim,
                                                    clipping_threshold, norm_based_clipping,
-                                                   ng_per_element_scale_options, ng_affine_options,
-                                                   highway_lstm, highway_lstm_h_rec,
+                                                   ng_per_element_scale_options, ng_affine_options, highway_lstm, 
                                                    lstm_delay = lstm_delay[i][0], self_repair_scale_nonlinearity = self_repair_scale_nonlinearity, self_repair_scale_clipgradient = self_repair_scale_clipgradient)
         # make the intermediate config file for layerwise discriminative
         # training
@@ -332,8 +328,7 @@ def Main():
                 xent_regularize = args.xent_regularize,
                 self_repair_scale_nonlinearity = args.self_repair_scale_nonlinearity,
                 self_repair_scale_clipgradient = args.self_repair_scale_clipgradient,
-                highway_lstm = args.highway_lstm,
-                highway_lstm_h_rec = args.highway_lstm_h_rec)
+                highway_lstm = args.highway_lstm)
 
 if __name__ == "__main__":
     Main()
