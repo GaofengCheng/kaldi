@@ -65,6 +65,16 @@ NnetIo::NnetIo(const std::string &name,
     indexes[i].t = t_begin + i;
 }
 
+NnetIo::NnetIo(const std::string &name,
+               int32 t_begin, const GeneralMatrix &feats):
+    name(name), features(feats) {
+  int32 num_rows = feats.NumRows();
+  KALDI_ASSERT(num_rows > 0);
+  indexes.resize(num_rows);  // sets all n,t,x to zeros.
+  for (int32 i = 0; i < num_rows; i++)
+    indexes[i].t = t_begin + i;
+}
+
 void NnetIo::Swap(NnetIo *other) {
   name.swap(other->name);
   indexes.swap(other->indexes);
@@ -124,7 +134,7 @@ void NnetExample::Compress() {
 
 
 size_t NnetIoStructureHasher::operator () (
-    const NnetIo &io) const {
+    const NnetIo &io) const noexcept {
   StringHasher string_hasher;
   IndexVectorHasher indexes_hasher;
 
@@ -147,7 +157,7 @@ bool NnetIoStructureCompare::operator () (
 
 
 size_t NnetExampleStructureHasher::operator () (
-    const NnetExample &eg) const {
+    const NnetExample &eg) const noexcept {
   // these numbers were chosen at random from a list of primes.
   NnetIoStructureHasher io_hasher;
   size_t size = eg.io.size(), ans = size * 35099;

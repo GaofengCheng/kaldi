@@ -26,8 +26,8 @@
 #include "nnet3/nnet-common.h"
 #include "nnet3/nnet-component-itf.h"
 #include "nnet3/nnet-descriptor.h"
-
-#include "nnet-computation-graph.h"
+#include "nnet3/nnet-computation.h"
+#include "nnet3/nnet-example.h"
 
 namespace kaldi {
 namespace nnet3 {
@@ -81,7 +81,7 @@ std::string PrintVectorPerUpdatableComponent(const Nnet &nnet,
 
 /// This function returns true if the nnet has the following properties:
 ///  It has an output called "output" (other outputs are allowed but may be
-///          ignored).
+///  ignored).
 ///  It has an input called "input", and possibly an extra input called
 ///    "ivector", but no other inputs.
 ///  There are probably some other properties that we really ought to
@@ -160,9 +160,39 @@ void ConvertRepeatedToBlockAffine(Nnet *nnet);
 /// Info() function (we need this in the CTC code).
 std::string NnetInfo(const Nnet &nnet);
 
-/// This function sets the dropout proportion in all dropout component to
+/// This function sets the dropout proportion in all dropout components to
 /// dropout_proportion value.
 void SetDropoutProportion(BaseFloat dropout_proportion, Nnet *nnet);
+
+
+/// Returns true if nnet has at least one component of type
+/// BatchNormComponent.
+bool HasBatchnorm(const Nnet &nnet);
+
+/// This function affects only components of type BatchNormComponent.
+/// It sets "test mode" on such components (if you call it with test_mode =
+/// true, otherwise it would set normal mode, but this wouldn't be needed
+/// often).  "test mode" means that instead of using statistics from the batch,
+/// it does a deterministic normalization based on statistics stored at training
+/// time.
+void SetBatchnormTestMode(bool test_mode, Nnet *nnet);
+
+
+/// This function zeros the stored component-level stats in the nnet using
+/// ZeroComponentStats(), then recomputes them with the supplied egs.  It
+/// affects batch-norm, for instance.  See also the version of RecomputeStats
+/// declared in nnet-chain-diagnostics.h.
+void RecomputeStats(const std::vector<NnetExample> &egs, Nnet *nnet);
+
+
+
+/// This function affects components of child-classes of
+/// RandomComponent( currently only DropoutComponent and DropoutMaskComponent).
+/// It sets "test mode" on such components (if you call it with test_mode =
+/// true, otherwise it would set normal mode, but this wouldn't be needed often).
+/// "test mode" means that having a mask containing (1-dropout_prob) in all
+/// elements.
+void SetDropoutTestMode(bool test_mode, Nnet *nnet);
 
 /// This function finds a list of components that are never used, and outputs
 /// the integer comopnent indexes (you can use these to index
@@ -173,6 +203,41 @@ void FindOrphanComponents(const Nnet &nnet, std::vector<int32> *components);
 /// output, and outputs the integer node indexes (you can use these to index
 /// nnet.GetNodeNames() to get their names).
 void FindOrphanNodes(const Nnet &nnet, std::vector<int32> *nodes);
+
+
+
+/**
+   Config class for the CollapseModel function.  This function
+   is reponsible for collapsing together sequential components where
+   doing so could make the test-time operation more efficient.
+   For example, dropout components and batch-norm components that
+   are in test mode can be combined with the next layer; and if there
+   are successive affine components it may also be possible to
+   combine these under some circumstances.
+
+   It expects batch-norm components to be in test mode; you should probably call
+   SetBatchnormTestMode() and SetDropoutTestMode() before CollapseModel().
+ */
+struct CollapseModelConfig {
+  bool collapse_dropout;  // dropout then affine/conv.
+  bool collapse_batchnorm;  // batchnorm then affine.
+  bool collapse_affine;  // affine or fixed-affine then affine.
+  bool collapse_scale;  // affine then fixed-scale.
+  CollapseModelConfig(): collapse_dropout(true),
+                         collapse_batchnorm(true),
+                         collapse_affine(true),
+                         collapse_scale(true) { }
+};
+
+/**
+   This function modifies the neural net for efficiency, in a way that
+   suitable to be done in test time.  For example, it tries to get
+   rid of dropout, batchnorm and fixed-scale components, and to
+   collapse subsequent affine components if doing so won't hurt
+   speed.
+ */
+void CollapseModel(const CollapseModelConfig &config,
+                   Nnet *nnet);
 
 
 /**
@@ -203,6 +268,8 @@ void FindOrphanNodes(const Nnet &nnet, std::vector<int32> *nodes);
 
     set-learning-rate [name=<name-pattern>] learning-rate=<learning-rate>
        Sets the learning rate for any updatable nodes matching the name pattern.
+       Note: this sets the 'underlying' learning rate, i.e. it will get
+       multiplied by any 'learning-rate-factor' set in the nodes.
 
     rename-node old-name=<old-name> new-name=<new-name>
        Renames a node; this is a surface renaming that does not affect the structure

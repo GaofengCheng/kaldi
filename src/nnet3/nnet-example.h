@@ -52,6 +52,13 @@ struct NnetIo {
   NnetIo(const std::string &name,
          int32 t_begin, const MatrixBase<BaseFloat> &feats);
 
+  /// This constructor creates NnetIo with name "name", indexes with n=0, x=0,
+  /// and t values ranging from t_begin to t_begin + feats.NumRows() - 1, and
+  /// the provided features.  t_begin should be the frame that the first row
+  /// of 'feats' represents.
+  NnetIo(const std::string &name,
+         int32 t_begin, const GeneralMatrix &feats);
+
   /// This constructor sets "name" to the provided string, sets "indexes" with
   /// n=0, x=0, and t from t_begin to t_begin + labels.size() - 1, and the labels
   /// as provided.  t_begin should be the frame to which labels[0] corresponds.
@@ -79,7 +86,7 @@ struct NnetIo {
 /// (name, indexes, feature dimension) without looking at the value of features.
 /// It will be used in combining egs into batches of all similar structure.
 struct NnetIoStructureHasher {
-  size_t operator () (const NnetIo &a) const;
+  size_t operator () (const NnetIo &a) const noexcept;
 };
 /// This comparison object compares just the structural aspects of the NnetIo
 /// object (name, indexes, feature dimension) without looking at the value of
@@ -130,9 +137,11 @@ struct NnetExample {
 /// deal with differently-ordered, but otherwise identical, egs in practice so
 /// we don't bother making the hashing function independent of this order.
 struct NnetExampleStructureHasher {
-  size_t operator () (const NnetExample &eg) const;
+  size_t operator () (const NnetExample &eg) const noexcept;
   // We also provide a version of this that works from pointers.
-  size_t operator () (const NnetExample *eg) const { return (*this)(*eg); }
+  size_t operator () (const NnetExample *eg) const noexcept {
+    return (*this)(*eg);
+  }
 };
 
 
