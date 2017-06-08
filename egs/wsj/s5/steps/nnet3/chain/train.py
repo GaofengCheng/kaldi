@@ -211,7 +211,8 @@ def process_args(args):
             or not os.path.exists(args.dir+"/configs")):
         raise Exception("This scripts expects {0} to exist and have a configs "
                         "directory which is the output of "
-                        "make_configs.py script")
+                        "make_configs.py script".format(
+                        args.dir))
 
     if args.transform_dir is None:
         args.transform_dir = args.lat_dir
@@ -269,7 +270,8 @@ def train(args, run_opts):
 
     # split the training data into parts for individual jobs
     # we will use the same number of jobs as that used for alignment
-    common_lib.split_data(args.feat_dir, num_jobs)
+    common_lib.execute_command("utils/split_data.sh {0} {1}".format(
+            args.feat_dir, num_jobs))
     shutil.copy('{0}/tree'.format(args.tree_dir), args.dir)
     with open('{0}/num_jobs'.format(args.dir), 'w') as f:
         f.write(str(num_jobs))
@@ -404,14 +406,6 @@ def train(args, run_opts):
         num_archives_expanded, args.max_models_combine,
         args.num_jobs_final)
 
-    def learning_rate(iter, current_num_jobs, num_archives_processed):
-        return common_train_lib.get_learning_rate(iter, current_num_jobs,
-                                                  num_iters,
-                                                  num_archives_processed,
-                                                  num_archives_to_process,
-                                                  args.initial_effective_lrate,
-                                                  args.final_effective_lrate)
-
     min_deriv_time = None
     max_deriv_time_relative = None
     if args.deriv_truncate_margin is not None:
@@ -432,14 +426,24 @@ def train(args, run_opts):
 
         if args.stage <= iter:
             model_file = "{dir}/{iter}.mdl".format(dir=args.dir, iter=iter)
-            shrinkage_value = 1.0
-            if args.shrink_value != 1.0:
+
+            lrate = common_train_lib.get_learning_rate(iter, current_num_jobs,
+                                                       num_iters,
+                                                       num_archives_processed,
+                                                       num_archives_to_process,
+                                                       args.initial_effective_lrate,
+                                                       args.final_effective_lrate)
+            shrinkage_value = 1.0 - (args.proportional_shrink * lrate)
+            if shrinkage_value <= 0.5:
+                raise Exception("proportional-shrink={0} is too large, it gives "
+                                "shrink-value={1}".format(args.proportional_shrink,
+                                                          shrinkage_value))
+            if args.shrink_value < shrinkage_value:
                 shrinkage_value = (args.shrink_value
-                                   if common_train_lib.do_shrinkage(
+                                   if common_train_lib.should_do_shrinkage(
                                         iter, model_file,
                                         args.shrink_saturation_threshold)
-                                   else 1
-                                   )
+                                   else shrinkage_value)
 
             chain_lib.train_one_iteration(
                 dir=args.dir,
@@ -449,8 +453,7 @@ def train(args, run_opts):
                 num_jobs=current_num_jobs,
                 num_archives_processed=num_archives_processed,
                 num_archives=num_archives,
-                learning_rate=learning_rate(iter, current_num_jobs,
-                                            num_archives_processed),
+                learning_rate=lrate,
                 dropout_edit_string=common_train_lib.get_dropout_edit_string(
                     args.dropout_schedule,
                     float(num_archives_processed) / num_archives_to_process,

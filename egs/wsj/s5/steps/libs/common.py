@@ -108,13 +108,13 @@ def get_command_stdout(command, require_zero_status = True):
 
     stdout = p.communicate()[0]
     if p.returncode is not 0:
-        str = "Command exited with status {0}: {1}".format(
+        output = "Command exited with status {0}: {1}".format(
             p.returncode, command)
         if require_zero_status:
-            raise Exception(str)
+            raise Exception(output)
         else:
-            logger.warning(str)
-    return stdout
+            logger.warning(output)
+    return stdout if type(stdout) is str else stdout.decode()
 
 
 
@@ -244,11 +244,6 @@ def get_feat_dim_from_scp(feat_scp):
         "scp:{feat_scp} -".format(feat_scp=feat_scp))
     feat_dim = int(stdout_val)
     return feat_dim
-
-
-def split_data(data, num_jobs):
-    execute_command("utils/split_data.sh {data} {num_jobs}".format(
-          data=data, num_jobs=num_jobs))
 
 
 def read_kaldi_matrix(matrix_file):
