@@ -1,3 +1,1 @@
-#!/bin/bash
-
-# based on run_tdnn_6h.sh
+tuning/run_blstm_6h.sh
