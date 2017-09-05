@@ -108,9 +108,11 @@ if [ -f $data/segments ]; then
   utils/split_scp.pl $data/segments $split_segments || exit 1;
   rm $logdir/.error 2>/dev/null
 
+  $cmd JOB=1:$nj $logdir/make_mfcc_${name}_${tag}.JOB.log \
     extract-segments scp,p:$scp $logdir/segments.JOB ark:- \| \
     compute-mfcc-feats $vtln_opts --verbose=2 --config=$mfcc_config ark:- ark:- \| \
     copy-feats --compress=$compress $write_num_frames_opt ark:- \
+      ark,scp:$mfccdir/raw_mfcc_${name}_${tag}.JOB.ark,$mfccdir/raw_mfcc_${name}_${tag}.JOB.scp \
      || exit 1;
 
 else
@@ -126,20 +128,25 @@ else
   # add ,p to the input rspecifier so that we can just skip over
   # utterances that have bad wave data.
 
+  $cmd JOB=1:$nj $logdir/make_mfcc_${name}_${tag}.JOB.log \
     compute-mfcc-feats  $vtln_opts --verbose=2 --config=$mfcc_config \
      scp,p:$logdir/wav_${name}.JOB.scp ark:- \| \
       copy-feats $write_num_frames_opt --compress=$compress ark:- \
+      ark,scp:$mfccdir/raw_mfcc_${name}_${tag}.JOB.ark,$mfccdir/raw_mfcc_${name}_${tag}.JOB.scp \
       || exit 1;
 fi
 
 
 if [ -f $logdir/.error.$name ]; then
   echo "Error producing mfcc features for $name:"
+  tail $logdir/make_mfcc_${name}_${tag}.1.log
   exit 1;
 fi
 
 # concatenate the .scp files together.
 for n in $(seq $nj); do
+  cat $mfccdir/raw_mfcc_${name}_${tag}.$n.scp || exit 1;
+done > $data/feats_${tag}.scp || exit 1
 
 if $write_utt2num_frames; then
   for n in $(seq $nj); do
@@ -150,6 +157,7 @@ fi
 
 rm $logdir/wav_${name}.*.scp  $logdir/segments.* 2>/dev/null
 
+nf=`cat $data/feats_${tag}.scp | wc -l`
 nu=`cat $data/utt2spk | wc -l`
 if [ $nf -ne $nu ]; then
   echo "It seems not all of the feature files were successfully processed ($nf != $nu);"
