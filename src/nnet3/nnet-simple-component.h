@@ -240,59 +240,6 @@ class NormalizeComponent: public Component {
                         // is an extra dimension of the output.
 };
 
-class LayerNormalizationComponent: public Component {
-public:
-void Init(int32 input_dim, BaseFloat target_mean, BaseFloat target_rms, bool add_log_stddev);
- explicit NormalizeComponent(int32 input_dim,
-                             BaseFloat target_rms = 1.0,
-                             bool add_log_stddev = false) {
-   Init(input_dim, target_rms, add_log_stddev);
- }
- explicit NormalizeComponent(const NormalizeComponent &other);
- // note: there is some special code in NonlinerComponent::Info() that
- // specifically caters to this class.
- virtual int32 Properties() const {
-   return (add_log_stddev_ ?
-           kSimpleComponent|kBackpropNeedsInput|kBackpropAdds :
-           kSimpleComponent|kBackpropNeedsInput|kPropagateInPlace|
-           kBackpropAdds|kBackpropInPlace);
- }
- NormalizeComponent(): target_rms_(1.0), add_log_stddev_(false) { }
- virtual std::string Type() const { return "NormalizeComponent"; }
- virtual void InitFromConfig(ConfigLine *cfl);
- virtual Component* Copy() const { return new NormalizeComponent(*this); }
- virtual void* Propagate(const ComponentPrecomputedIndexes *indexes,
-                         const CuMatrixBase<BaseFloat> &in,
-                         CuMatrixBase<BaseFloat> *out) const;
- virtual void Backprop(const std::string &debug_info,
-                       const ComponentPrecomputedIndexes *indexes,
-                       const CuMatrixBase<BaseFloat> &in_value,
-                       const CuMatrixBase<BaseFloat> &, // out_value
-                       const CuMatrixBase<BaseFloat> &out_deriv,
-                       void *memo,
-                       Component *to_update,
-                       CuMatrixBase<BaseFloat> *in_deriv) const;
-
- virtual void Read(std::istream &is, bool binary);
- virtual void Write(std::ostream &os, bool binary) const;
- virtual int32 InputDim() const { return input_dim_; }
- virtual int32 OutputDim() const {
-   return (input_dim_ + (add_log_stddev_ ? 1 : 0));
- }
- virtual std::string Info() const;
-private:
- NormalizeComponent &operator = (const NormalizeComponent &other); // Disallow.
- enum { kExpSquaredNormFloor = -66 };
- static const BaseFloat kSquaredNormFloor;
- int32 input_dim_;
- BaseFloat target_rms_; // The target rms for outputs.
- // about 0.7e-20.  We need a value that's exactly representable in
- // float and whose inverse square root is also exactly representable
- // in float (hence, an even power of two).
-
- bool add_log_stddev_; // If true, log(max(epsi, sqrt(row_in^T row_in / D)))
-                       // is an extra dimension of the output.
-};
 
 /*
    Implements the sigmoid nonlinearity, i.e. the function y = exp(-x).
