@@ -443,6 +443,7 @@ class UpdatableComponent: public Component {
   // InitLearningRatesFromConfig() should be changed too.
   UpdatableComponent(): learning_rate_(0.001), learning_rate_factor_(1.0),
                         l2_regularize_(0.0), is_gradient_(false),
+                        orthonormal_constraint_(0.0),
                         max_change_(0.0) { }
 
   virtual ~UpdatableComponent() { }
@@ -503,8 +504,10 @@ class UpdatableComponent: public Component {
   /// ApplyL2Regularization(), declared in nnet-utils.h, which is used as part
   /// of the training workflow.
   BaseFloat L2Regularization() const { return l2_regularize_; }
+  BaseFloat OrthConstraint() const { return orthonormal_constraint_; }
 
   void SetL2Regularization(BaseFloat a) { l2_regularize_ = a; }
+  void SetOrthConstraint(BaseFloat a) { orthonormal_constraint_ = a; } 
 
   virtual std::string Info() const;
 
@@ -546,6 +549,8 @@ class UpdatableComponent: public Component {
                                    ///value will be scaled by this factor.
   BaseFloat l2_regularize_;  ///< L2 regularization constant.  See comment for
                              ///< the L2Regularization() for details.
+  BaseFloat orthonormal_constraint_;
+
   bool is_gradient_;  ///< True if this component is to be treated as a gradient rather
                       ///< than as parameters.  Its main effect is that we disable
                       ///< any natural-gradient update and just compute the standard

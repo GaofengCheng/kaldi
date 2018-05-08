@@ -441,7 +441,36 @@ void ApplyL2Regularization(const Nnet &nnet,
                            BaseFloat l2_regularize_scale,
                            Nnet *delta_nnet);
 
+/**
 
+    @param [in] nnet  The neural net that is being trained; expected
+                      to be different from delta_nnet
+    @param [in] orthonormal_constraint_scale   A scale on the l2 regularization.
+                      Usually this will be equal to the number of
+                      distinct examples (e.g. the number of chunks of
+                      speech-- more precisely, the number of distinct
+                      'n' values) in the minibatch, but this is
+                      multiplied by a configuration value
+                      --orthonormal-constraint-scale passed in from the command
+                      line.  The reason for making l2 proportional to
+                      the number of elements in the minibatch is that
+                      we add the parameter gradients over the minibatch
+                      (we don't average), so multiplying the l2 factor by the
+                      number of elements in the minibatch is necessary to
+                      make the amount of l2 vs. gradient contribution stay
+                      the same when we vary the minibatch size.
+                      The --orthonormal-constraint-scale option is provided so that the
+                      calling script can correct for the effects of
+                      parallelization via model-averaging (we'd normally set
+                      this to 1/num-parallel-jobs).
+    @param [out] delta_nnet  The neural net containing the parameter
+                      updates; this is a copy of 'nnet' that is used
+                      for purposes of momentum and applying max-change
+                      values.  This is what this code adds to.
+ */
+void ApplyOrthConstraint(const Nnet &nnet,
+                         BaseFloat orthonormal_constraint_scale,
+                         Nnet *delta_nnet);
 /**
    This function scales the batchorm stats of any batchnorm components
    (components of type BatchNormComponent) in 'nnet' by the scale

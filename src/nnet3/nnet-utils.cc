@@ -2051,6 +2051,53 @@ void ApplyL2Regularization(const Nnet &nnet,
   }
 }
 
+void ApplyOrthConstraint(const Nnet &nnet,
+                           BaseFloat orthonormal_constraint_scale,
+                           Nnet *delta_nnet) {
+  if (orthonormal_constraint_scale == 0.0)
+    return;
+  for (int32 c = 0; c < nnet.NumComponents(); c++) {
+    const Component *src_component_in = nnet.GetComponent(c);
+    if (src_component_in->Properties() & kUpdatableComponent) {
+      const UpdatableComponent *src_component =
+          dynamic_cast<const UpdatableComponent*>(src_component_in);
+      UpdatableComponent *dest_component =
+          dynamic_cast<UpdatableComponent*>(delta_nnet->GetComponent(c));
+      // The following code will segfault if they aren't both updatable, which
+      // would be a bug in the calling code.
+      BaseFloat lrate = dest_component->LearningRate(),
+          orthonormal_constraint = dest_component->OrthConstraint();
+      KALDI_ASSERT(lrate >= 0 && l2_regularize >= 0);
+      BaseFloat scale = -1.0 * orthonormal_constraint_scale * lrate * orthonormal_constraint;
+      
+      // compute orthogonal objective value
+      CuMatrixBase<BaseFloat> &params = src_component->Params();
+      int32 rows = params.NumRows(), cols = params.NumCols();
+      if (rows < cols) {
+        ApplyOrthConstraintInternal(&params);
+      } else {
+        CuMatrix<BaseFloat> params_trans(params, kTrans);
+        ApplyOrthConstraintInternal(&params_trans);
+        params.CopyFromMat(params_trans, kTrans);
+      }
+      // *compute orthogonal objective value
+
+      if (scale != 0.0)
+        dest_component->Add(scale, &parmas);
+    }
+  }
+}
+
+void ApplyOrthConstraintInternal(CuMatrixBase<BaseFloat> *M) {
+  int32 rows = M->NumRows(), cols = M->NumCols();
+  CuMatrix<BaseFloat> M_update(rows, cols);
+  CuMatrix<BaseFloat> P(rows, rows);
+  P.SymAddMat2(1.0, *M, kNoTrans, 0.0);
+  P.CopyLowerToUpper();
+  P.AddToDiag(-1.0)
+  M_update.AddMatMat(4.0 , P, kNoTrans, *M, kNoTrans, 0.0);
+  M->CopyFromMat(M_update, kNoTrans);
+}
 
 } // namespace nnet3
 } // namespace kaldi

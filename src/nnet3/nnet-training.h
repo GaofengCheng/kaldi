@@ -37,6 +37,7 @@ struct NnetTrainerOptions {
   bool debug_computation;
   BaseFloat momentum;
   BaseFloat l2_regularize_factor;
+  BaseFloat orthonormal_constraint_factor;
   BaseFloat backstitch_training_scale;
   int32 backstitch_training_interval;
   BaseFloat batchnorm_stats_scale;
@@ -54,6 +55,7 @@ struct NnetTrainerOptions {
       debug_computation(false),
       momentum(0.0),
       l2_regularize_factor(1.0),
+      orthonormal_constraint_factor(0.01),
       backstitch_training_scale(0.0),
       backstitch_training_interval(1),
       batchnorm_stats_scale(0.8),
@@ -78,6 +80,8 @@ struct NnetTrainerOptions {
                    "so that the 'effective' learning rate is the same as "
                    "before (because momentum would normally increase the "
                    "effective learning rate by 1/(1-momentum))");
+    opts->Register("orthonormal-constraint-factor", &orthonormal_constraint_factor,
+                   "Factor that affects the orth penalty on model");
     opts->Register("l2-regularize-factor", &l2_regularize_factor, "Factor that "
                    "affects the strength of l2 regularization on model "
                    "parameters.  The primary way to specify this type of "

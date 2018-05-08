@@ -105,6 +105,10 @@ void NnetTrainer::TrainInternal(const NnetExample &eg,
   ApplyL2Regularization(*nnet_,
                         GetNumNvalues(eg.io, false) * config_.l2_regularize_factor,
                         delta_nnet_);
+  
+  ApplyOrthConstraint(*nnet_,
+                      GetNumNvalues(eg.io, false) * config_.orthonormal_constraint_factor,
+                      delta_nnet_);
 
   // Update the parameters of nnet
   bool success = UpdateNnetWithMaxChange(*delta_nnet_, config_.max_param_change,
@@ -117,7 +121,8 @@ void NnetTrainer::TrainInternal(const NnetExample &eg,
 
   // The following will only do something if we have a LinearComponent
   // or AffineComponent with orthonormal-constraint set to a nonzero value.
-  ConstrainOrthonormal(nnet_);
+  //!!!!!!!!!!!!!!!!!!!!!!! orth code
+  //ConstrainOrthonormal(nnet_);
 
   // Scale deta_nnet
   if (success)
