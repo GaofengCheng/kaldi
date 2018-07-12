@@ -309,6 +309,9 @@ void CollapseModel(const CollapseModelConfig &config,
        components, of types LinearComponent and NaturalGradientAffineComponent.
        See also 'reduce-rank'.
 
+    show-rank name=<name-pattern> 
+       Showing the rank of specific matrix.
+
     reduce-rank name=<name-pattern> rank=<dim>
        Locates all components with names matching <name-pattern>, which are
        type AffineComponent or child classes thereof.  Does SVD on the

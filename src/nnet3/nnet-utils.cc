@@ -1121,7 +1121,71 @@ void ReduceRankOfComponents(const std::string component_name_pattern,
             << " components.";
 }
 
+// This code is used to show the rank distribution of 
+// specified components.
+void ShowRankOfComponents(const std::string component_name_pattern,
+                          Nnet *nnet) {
+  int32 num_components_showed = 0;
+  bool is_linearcomponent_ = false;
+  for (int32 c = 0; c < nnet->NumComponents(); c++) {
+    Component *component = nnet->GetComponent(c);
+    std::string component_name = nnet->GetComponentName(c);
+    if (NameMatchesPattern(component_name.c_str(),
+                           component_name_pattern.c_str())) {
+      KALDI_LOG << " ; Component name: " << component->Type() << "; ";
+      AffineComponent *affine =  dynamic_cast<AffineComponent*>(component);
+      LinearComponent *affine_linear =  dynamic_cast<LinearComponent*>(component);
+      if (affine == NULL) {
+        if (affine_linear == NULL) {
+          KALDI_WARN << "Not showing rank of component " << component_name
+                   << " as it is not an AffineComponent.";
+        }
+        is_linearcomponent_ = true;
+      }
 
+      if (is_linearcomponent_) {
+        int32 input_dim = affine_linear->InputDim(),
+            output_dim = affine_linear->OutputDim();
+        Matrix<BaseFloat> linear_params(affine_linear->Params());
+        // note: 'linear_params' is of dimension output_dim by input_dim.
+        int32 middle_dim = std::min<int32>(input_dim, output_dim);
+        Vector<BaseFloat> s(middle_dim);
+        Matrix<BaseFloat> U(output_dim, middle_dim),
+            Vt(middle_dim, input_dim);
+        linear_params.Svd(&s, &U, &Vt);
+        // make sure the singular values are sorted from greatest to least value.
+        SortSvd(&s, &U, &Vt);
+        BaseFloat s_sum_orig = s.Sum();
+        KALDI_LOG << "For component " << component_name
+                  << " singular value sum is "
+                  << s_sum_orig << "; Singular Value is: "<< s;
+        
+        num_components_showed++;
+      } else {
+        int32 input_dim = affine->InputDim(),
+              output_dim = affine->OutputDim();
+        Matrix<BaseFloat> linear_params(affine->LinearParams());
+        Vector<BaseFloat> bias_params(affine->BiasParams());
+        // note: 'linear_params' is of dimension output_dim by input_dim.
+        int32 middle_dim = std::min<int32>(input_dim, output_dim);
+        Vector<BaseFloat> s(middle_dim);
+        Matrix<BaseFloat> U(output_dim, middle_dim),
+            Vt(middle_dim, input_dim);
+        linear_params.Svd(&s, &U, &Vt);
+        // make sure the singular values are sorted from greatest to least value.
+        SortSvd(&s, &U, &Vt);
+        BaseFloat s_sum_orig = s.Sum();
+        KALDI_LOG << "For component " << component_name
+                  << " singular value sum is "
+                  << s_sum_orig << "; Singular Value is: "<< s;
+        
+        num_components_showed++;
+      }
+    }
+  }
+  KALDI_LOG << "Showing rank distribution of parameters of " << num_components_showed
+            << " components.";
+}
 
 
 void ReadEditConfig(std::istream &edit_config_is, Nnet *nnet) {
@@ -1300,6 +1364,11 @@ void ReadEditConfig(std::istream &edit_config_is, Nnet *nnet) {
         KALDI_ERR << "Bottleneck-dim must be positive in apply-svd command.";
       SvdApplier applier(name_pattern, bottleneck_dim, nnet);
       applier.ApplySvd();
+    } else if (directive == "show-rank") {
+      std::string name_pattern;
+      if (!config_line.GetValue("name", &name_pattern))
+        KALDI_ERR << "Edit directive show-rank requires 'name' specified.";
+        ShowRankOfComponents(name_pattern, nnet);
     } else if (directive == "reduce-rank") {
       std::string name_pattern;
       int32 rank = -1;
