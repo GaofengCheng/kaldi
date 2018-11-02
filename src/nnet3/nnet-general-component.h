@@ -814,6 +814,8 @@ class DropoutMaskComponent: public RandomComponent {
                   expected value is 1.0.  This behavior is different from
                   DropoutComponent and DropoutMaskComponent.
 
+                  By Gaofeng: adding option the one-zero dropout option
+
                   For continuous dropout (continuous==true), the dropout scales
                   will have values (1.0 + 2 * dropout-proportion *
                   Uniform[-1,1]).  This might seem like a strange choice, but it
@@ -821,6 +823,8 @@ class DropoutMaskComponent: public RandomComponent {
                   'extremal' case where the dropout scales are distributed as
                   Uniform[0, 2] and we can pass in the dropout scale as if it
                   were a conventional dropout scale.
+
+                  By Gaofeng: [0,2] may be too large for RNN.
 
        time-period=0   This determines how the dropout mask interacts
                   with the time index (t).  In all cases, different sequences
@@ -909,6 +913,7 @@ class GeneralDropoutComponent: public RandomComponent {
   BaseFloat dropout_proportion_;
 
   bool continuous_;
+  bool scale_non_continuous_;
 
   bool test_mode_;
 

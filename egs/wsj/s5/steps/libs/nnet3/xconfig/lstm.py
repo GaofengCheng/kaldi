@@ -314,6 +314,8 @@ class XconfigLstmpLayer(XconfigLayerBase):
                         'zeroing-threshold' : 15.0,
                         'dropout-proportion' : -1.0, # If -1.0, no dropout components will be added
                         'dropout-per-frame' : False,  # If false, regular dropout, not per frame.
+                        'dropout-per-dim' : False, # If false, regular dropout; if true the shared-mask dropout
+                        'dropout-per-dim-continuous' : False, # If false, the zero-one dropout; if true the non-zero-one dropout
                         'decay-time':  -1.0,
                        'l2-regularize': 0.0,
                        }
@@ -476,10 +478,20 @@ class XconfigLstmpLayer(XconfigLayerBase):
         configs.append("component name={0}.o type=SigmoidComponent dim={1} {2}".format(name, cell_dim, repair_nonlin_str))
         configs.append("component name={0}.g type=TanhComponent dim={1} {2}".format(name, cell_dim, repair_nonlin_str))
         configs.append("component name={0}.h type=TanhComponent dim={1} {2}".format(name, cell_dim, repair_nonlin_str))
-        if dropout_proportion != -1.0:
-            configs.append("component name={0}.dropout type=DropoutComponent dim={1} "
-                           "dropout-proportion={2} dropout-per-frame={3}"
-                           .format(name, cell_dim, dropout_proportion, dropout_per_frame))
+        if dropout_proportion != -1.0 :
+            if not (self.config['dropout-per-dim'] or
+                    self.config['dropout-per-dim-continuous']):
+                configs.append("component name={0}.dropout type=DropoutComponent dim={1} "
+                            "dropout-proportion={2} dropout-per-frame={3}"
+                            .format(name, cell_dim, dropout_proportion, dropout_per_frame))
+            else:
+                continuous_opt='continuous=true' if self.config['dropout-per-dim-continuous'] else ''
+
+                configs.append('component name={0}.dropout type=GeneralDropoutComponent '
+                                'dim={1} dropout-proportion={2} {3}'.format(
+                                    name, cell_dim, self.config['dropout-proportion'],
+                                    continuous_opt))
+
         configs.append("# Defining the components for other cell computations")
         configs.append("component name={0}.c1 type=ElementwiseProductComponent input-dim={1} output-dim={2}"
                        "".format(name, 2 * cell_dim, cell_dim))
