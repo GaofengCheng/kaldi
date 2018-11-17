@@ -913,7 +913,10 @@ class GeneralDropoutComponent: public RandomComponent {
   BaseFloat dropout_proportion_;
 
   bool continuous_;
-  bool scale_non_continuous_;
+
+  bool non_continuous_scale_;
+
+  //bool continuous_below_one_;
 
   bool test_mode_;
 

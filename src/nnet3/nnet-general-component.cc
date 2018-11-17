@@ -1525,6 +1525,8 @@ std::string GeneralDropoutComponent::Info() const {
          << ", dropout-proportion=" << dropout_proportion_;
   if (continuous_)
     stream << ", continuous=true";
+  if (non_continuous_scale_)
+    stream << ", non_continuous_scale=true";
   if (time_period_ > 0)
     stream << ", time-period=" << time_period_;
   return stream.str();
@@ -1532,7 +1534,7 @@ std::string GeneralDropoutComponent::Info() const {
 
 GeneralDropoutComponent::GeneralDropoutComponent():
     dim_(-1), block_dim_(-1), time_period_(0),
-    dropout_proportion_(0.5), continuous_(false) { }
+    dropout_proportion_(0.5), continuous_(false), non_continuous_scale_(true) { }
 
 GeneralDropoutComponent::GeneralDropoutComponent(
     const GeneralDropoutComponent &other):
@@ -1540,7 +1542,8 @@ GeneralDropoutComponent::GeneralDropoutComponent(
     block_dim_(other.block_dim_),
     time_period_(other.time_period_),
     dropout_proportion_(other.dropout_proportion_),
-    continuous_(other.continuous_) { }
+    continuous_(other.continuous_),
+    non_continuous_scale_(other.non_continuous_scale_) { }
 
 void* GeneralDropoutComponent::Propagate(
     const ComponentPrecomputedIndexes *indexes_in,
@@ -1634,6 +1637,12 @@ void GeneralDropoutComponent::Read(std::istream &is, bool binary) {
   } else {
     continuous_ = false;
   }
+  if (PeekToken(is, binary) == 'N') {
+    ExpectToken(is, binary, "<NonContinuousScale>");
+    non_continuous_scale_ = true;
+  } else {
+    non_continuous_scale_ = false;
+  }
   ExpectToken(is, binary, "</GeneralDropoutComponent>");
 }
 
@@ -1652,6 +1661,8 @@ void GeneralDropoutComponent::Write(std::ostream &os, bool binary) const {
     WriteToken(os, binary, "<TestMode>");
   if (continuous_)
     WriteToken(os, binary, "<Continuous>");
+  if (non_continuous_scale_)
+    WriteToken(os, binary, "<NonContinuousScale>");
   WriteToken(os, binary, "</GeneralDropoutComponent>");
 }
 
@@ -1674,6 +1685,8 @@ void GeneralDropoutComponent::InitFromConfig(ConfigLine *cfl) {
   cfl->GetValue("dropout-proportion", &dropout_proportion_);
   continuous_ = false;
   cfl->GetValue("continuous", &continuous_);
+  non_continuous_scale_ = true;
+  cfl->GetValue("non-continuous-scale", &non_continuous_scale_);
   test_mode_ = false;
   cfl->GetValue("test-mode", &test_mode_);
 }
@@ -1696,11 +1709,12 @@ CuMatrix<BaseFloat>* GeneralDropoutComponent::GetMemo(
     // function (x>0?1:0), a proportion "dropout_proportion" will be zero and (1 -
     // dropout_proportion) will be 1.0.
     ans->ApplyHeaviside();
-    ans->Scale(1.0 / dropout_proportion);
+    if (non_continuous_scale_)
+      ans->Scale(1.0 / (1.0 - dropout_proportion));
   } else {
-    ans->Scale(dropout_proportion * 4.0);
-    // make the expected value 1.0.
-    ans->Add(1.0 - (2.0 * dropout_proportion));
+      ans->Scale(dropout_proportion * 4.0);
+      // make the expected value 1.0.
+      ans->Add(1.0 - (2.0 * dropout_proportion));
   }
   return ans;
 }
