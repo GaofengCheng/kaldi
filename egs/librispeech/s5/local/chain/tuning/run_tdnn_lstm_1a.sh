@@ -29,6 +29,8 @@ speed_perturb=true
 affix=1a
 decode_iter=
 decode_nj=50
+gmm=tri6b_cleaned
+train_set=train_960_cleaned
 
 # LSTM training options
 frames_per_chunk=140,100,160
@@ -62,26 +64,25 @@ EOF
 fi
 
 # The iVector-extraction and feature-dumping parts are the same as the standard
-# nnet3 setup, and you can skip them by setting "--stage 8" if you have already
+# nnet3 setup, and you can skip them by setting "--stage 11" if you have already
 # run those things.
 
-suffix=
-if [ "$speed_perturb" == "true" ]; then
-  suffix=_sp
-fi
+local/nnet3/run_ivector_common.sh --stage $stage \
+                                  --train-set $train_set \
+                                  --gmm $gmm \
+                                  --num-threads-ubm 6 --num-processes 3 \
+                                  --nnet3-affix "$nnet3_affix" || exit 1;
 
-gmm=tri6b_cleaned
-dir=exp/chain${nnet3_affix}/tdnn_lstm${affix}${suffix}
-train_set=train_960_cleaned
-ali_dir=exp/${gmm}_ali_${train_set}_sp_comb
+dir=exp/chain${nnet3_affix}/tdnn_lstm${affix}_sp
+ali_dir=exp/${gmm}_ali_${train_set}_sp
 tree_dir=exp/chain${nnet3_affix}/tree_sp${tree_affix:+_$tree_affix}
 lang=data/lang_chain
-train_data_dir=data/${train_set}_sp_hires_comb
-lores_train_data_dir=data/${train_set}_sp_comb
-train_ivector_dir=exp/nnet3${nnet3_affix}/ivectors_${train_set}_sp_hires_comb
-lat_dir=exp/chain${nnet3_affix}/${gmm}_${train_set}_sp_comb_lats
+train_data_dir=data/${train_set}_sp_hires
+lores_train_data_dir=data/${train_set}_sp
+train_ivector_dir=exp/nnet3${nnet3_affix}/ivectors_${train_set}_sp_hires
+lat_dir=exp/chain${nnet3_affix}/${gmm}_${train_set}_sp_lats
 
-if [ $stage -le 12 ]; then
+if [ $stage -le 14 ]; then
   echo "$0: creating neural net configs using the xconfig parser";
 
   num_targets=$(tree-info $tree_dir/tree |grep num-pdfs|awk '{print $2}')
@@ -132,7 +133,7 @@ EOF
   steps/nnet3/xconfig_to_configs.py --xconfig-file $dir/configs/network.xconfig --config-dir $dir/configs/
 fi
 
-if [ $stage -le 13 ]; then
+if [ $stage -le 15 ]; then
   if [[ $(hostname -f) == *.clsp.jhu.edu ]] && [ ! -d $dir/egs/storage ]; then
     utils/create_split_dir.pl \
       /export/c0{1,2,5,7}/$USER/kaldi-data/egs/swbd-$(date +'%m_%d_%H_%M')/s5c/$dir/egs/storage $dir/egs/storage
@@ -175,7 +176,7 @@ fi
 
 
 graph_dir=$dir/graph_tgsmall
-if [ $stage -le 14 ]; then
+if [ $stage -le 16 ]; then
   # Note: it might appear that this $lang directory is mismatched, and it is as
   # far as the 'topo' is concerned, but this script doesn't read the 'topo' from
   # the lang directory.
@@ -191,7 +192,7 @@ iter_opts=
 if [ ! -z $decode_iter ]; then
   iter_opts=" --iter $decode_iter "
 fi
-if [ $stage -le 15 ]; then
+if [ $stage -le 17 ]; then
   rm $dir/.error 2>/dev/null || true
   for decode_set in test_clean test_other dev_clean dev_other; do
       (
